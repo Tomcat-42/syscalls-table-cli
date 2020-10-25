@@ -1,0 +1,99 @@
+#!/usr/bin/env python
+
+from terminaltables import SingleTable
+import textwrap
+import argparse
+import sys
+import re
+import os
+import json
+
+JSON_PATH = "/usr/share/syscalls/syscalls.json"
+
+ROWS, COLUMN_WIDTH = map(int, os.popen('stty size', 'r').read().split())
+NUM_COLUMNS = 8
+WRAP_WIDTH = COLUMN_WIDTH//(NUM_COLUMNS + 1)
+
+convention = """ x86(aka i386) calling convention:
+  * The system call number is stored in $EAX. $EBX, $ECX,
+    $EDX, $ESI, $EDI, $EBP are used for passing 6 parameters to system calls.
+  * The return value is in $EAX. All other registers(including EFLAGS) are preserved.
+  * The call is made using int 0x80.
+
+x86_64 calling convention:
+  * The number of the syscall has to be passed in $RAX.
+    $RDI, $RSI, $RDX, $R10, $R8 and $R9 are used for passing the 6 parameters.
+  * $RAX stores the syscall return value. All other registers(with exception of $RCX and $R11)
+    are preserved.
+  * The call is made using syscall. """
+
+
+def search(query, x86=False):
+    json_obj = json.loads(open(JSON_PATH).read())
+    obj = json_obj["x86" if x86 else "x86_64"]
+    query_strings = query.split()
+    query_regex = "".join(list(map(lambda x: "(.*"+x+")", query_strings)))
+
+    obj_filter = list(
+        filter(lambda x: x and not x["name"].startswith("compat") and re.match(query_regex, x["name"], re.IGNORECASE), obj))
+
+    return format(obj_filter)
+
+
+def format(lst):
+    ret = []
+    for i in lst:
+        call = []
+        call.append(textwrap.fill(i["name"], width=WRAP_WIDTH)
+                    if (i["name"] and i["parameters"]) else "*")
+
+        call.append(i["number"]["hex"] + "(" + str(i["number"]["int"]) + ")"
+                    if i["number"] else "*")
+
+        for j in i["parameters_details"]:
+            if j:
+                call.append(textwrap.fill(
+                    j["type"], width=WRAP_WIDTH))
+            else:
+                call.append("*")
+
+        if(i["definition"]["file"] and i["definition"]["lineno"]):
+            call.append(textwrap.fill(i["definition"]["file"] + ":" +
+                                      str(i["definition"]["lineno"]), width=WRAP_WIDTH))
+        else:
+            call.append("*")
+        ret.append(call)
+    return ret
+
+
+def main():
+    # create parser
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+                                     prog="syscalls", description="Commandline linux kernel syscalls reference table", epilog=convention)
+    parser.format_help()
+    parser.add_argument("-a", choices=[
+                        "32", "64"], help="x84 or x86_64 syscalls", default="64")
+    parser.add_argument("search", help="search parameter")
+    args = parser.parse_args()
+
+    header_64 = ["name", "RAX", "RDI", "RSI",
+                 "RDX", "R10", "R8", "R9", "definition"]
+    header_32 = ["name", "EAX", "EBX", "ECX",
+                 "EDX", "ESI", "EDI", "definition"]
+    table_data = [
+        header_64 if args.a == "64" else header_32
+    ]
+
+    results = search(args.search, args.a == "32")
+    if(results):
+        for i in results:
+            table_data.append(i)
+        table = SingleTable(table_data)
+
+        print(table.table)
+    else:
+        print("syscall(s) not found :(")
+
+
+if __name__ == '__main__':
+    main()
