@@ -8,21 +8,24 @@ JSON_DIR="/usr/share/syscalls"
 SRC_DIR="/tmp/"
 
 # Change for the target version
-KERNEL_VERSION="4.14.201"
-KERNEL_LINK="https://www.kernel.org/pub/linux/kernel/v4.x/linux-${KERNEL_VERSION}.tar.xz"
+KERNEL_VERSION="5.4.72"
+KERNEL_LINK="https://cdn.kernel.org/pub/linux/kernel/v${KERNEL_VERSION%%.*}.x/linux-${KERNEL_VERSION}.tar.xz"
 
 TBL_64="${SRC_DIR}linux-${KERNEL_VERSION}/arch/x86/entry/syscalls/syscall_64.tbl"
 TBL_32="${SRC_DIR}linux-${KERNEL_VERSION}/arch/x86/entry/syscalls/syscall_32.tbl"
 
 # Will download the source from kernel.org if not already present
-if [ ! -d ${SRC_DIR}linux-${KERNEL_VERSION} ]; then
+if [ ! -f "syscalls.json" ] && [ ! -d ${SRC_DIR}linux-${KERNEL_VERSION} ]; then
+    echo "[+] Downloading linux source code from kernel.org"
+    echo "    ${KERNEL_LINK}"
     curl -L $KERNEL_LINK >${SRC_DIR}linux-${KERNEL_VERSION}.tar.xz
     tar xf ${SRC_DIR}linux-${KERNEL_VERSION}.tar.xz -C $SRC_DIR
+    printf "[+] Done :)\n"
 fi
 
 # Test if tbl files exists
-if [ ! -f ${TBL_64} ] || [ ! -f ${TBL_32} ]; then
-    echo "File(s) syscall_64.tbl or syscall_32.tbl doesn't exist"
+if [ ! -f ${TBL_64} ] || [ ! -f ${TBL_32} ] && [ ! -f "syscalls.json" ]; then
+    echo "[-] File(s) syscall_64.tbl or syscall_32.tbl doesn't exist"
     exit 1
 fi
 
@@ -54,15 +57,17 @@ if [ ! -f "syscalls.json" ]; then
     # changes /tmp/linux* to /linux* in the function definions
     sed -i "s/\/tmp\/linux-${KERNEL_VERSION}\///g" syscalls.json
 else
-    echo "[-] syscalls.json already exists! delete it to generate another one."
+    echo "[~] default syscalls.json detected! delete it if yoy wish to generate another one."
 fi
 
 # install
 if [ -f "syscalls" ] && [ -f "syscalls.json" ]; then
+    echo "[+] Copying executable to ${INSTALL_DIR}" 
     sudo mkdir -p ${JSON_DIR}
-    cp -av syscalls.json ${JSON_DIR}
-    cp -av syscalls ${INSTALL_DIR}
-    chmod u+x ${INSTALL_DIR}/syscalls
+    sudo cp -av syscalls.json ${JSON_DIR}
+    sudo cp -av syscalls ${INSTALL_DIR}
+    sudo chmod u+x ${INSTALL_DIR}/syscalls
 else
     echo "[-] syscalls or syscalls.json don't exist! installation failed."
+    exit 1
 fi

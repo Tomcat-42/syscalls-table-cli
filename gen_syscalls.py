@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# SCARY CODE UPHEAD. PROCEED AT YOUR OWN RISK.
+
 import ctags
 import re
 import simplejson
@@ -40,10 +42,10 @@ def gen_syscalls(sct_file, x32=False):
                         regs = {}
 
                         details["parameters_details"] = []
-                        if(len(sig) < 6 if x32 else 7):
+                        if(len(sig) < (7 if x32 else 8)):
                             for param in sig:
                                 par = param.strip()
-                                par_def = None
+                                par_def = ""
 
                                 if(param.find("struct") != -1):
                                     type_match = re.search(
@@ -57,8 +59,10 @@ def gen_syscalls(sct_file, x32=False):
                                 details["parameters_details"].append(
                                     {'type': par, 'def': par_def})
                         else:
-                            details["parameters_details"].append("param addr*")
-                        remaining = (9 if x32 else 10) - len(details)
+                            details["parameters_details"].append(
+                                {"type": "param addr*", "def": par_def})
+                        remaining = (5 if x32 else 6) - \
+                            len(details["parameters_details"])
                         for x in range(0, remaining):
                             details["parameters_details"].append("")
 
@@ -68,7 +72,7 @@ def gen_syscalls(sct_file, x32=False):
                         if tags.find(entry, search.encode("utf-8"), ctags.TAG_FULLMATCH | ctags.TAG_OBSERVECASE):
                             found = False
                             while(not found):
-                                if(entry["pattern"].decode("utf-8").find(pattern) == 2):
+                                if(entry["pattern"].decode("utf-8").find(pattern) >= 2):
                                     # details['found'] = entry['pattern']
                                     details["definition"] = {
                                         "file": entry["file"], "lineno": int(entry['lineNumber'])}
@@ -76,24 +80,22 @@ def gen_syscalls(sct_file, x32=False):
                                     break
                                 if(not tags.findNext(entry)):
                                     details["definition"] = {
-                                        "file": "not found", "lineno": "not found"}
+                                        "file": "", "lineno": ""}
                                     break
                         else:
                             details["definition"] = {
-                                "file": "not found", "lineno": "not found"}
+                                "file": "", "lineno": ""}
                         sys_calls.append(details)
                     else:
                         if(not tags.findNext(entry)):
                             sys_calls.append([i].append(
-                                [""] * (10 if x32 else 11)))
+                                [""] * (7 if x32 else 8)))
                             break
             i += 1
         else:
-            sys_calls.append(
-                [i, "not implemented", "", "%0#4x" % (i)].append(
-                    [""]*(7 if x32 else 8)
-                )
-            )
+            details = {"number": {"int": i, "hex": ("%0#4x" % (i))}, "name": "not implemented", "parameters": "", "parameters_details": {
+            }, "definition": {"file": "", "lineno": ""}}
+            sys_calls.append(details)
             i += 1
 
     return sys_calls
